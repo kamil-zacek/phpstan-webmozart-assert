@@ -29,7 +29,7 @@ class TestStrings
 		assertType('string', $a);
 
 		Assert::startsWith($a, $b);
-		assertType('non-empty-string', $a);
+		assertType('string', $a);
 	}
 
 	public function startsWithLetter(string $a): void
@@ -47,7 +47,7 @@ class TestStrings
 		assertType('string', $a);
 
 		Assert::endsWith($a, $b);
-		assertType('non-empty-string', $a);
+		assertType('string', $a);
 	}
 
 	public function unicodeLetters($a): void

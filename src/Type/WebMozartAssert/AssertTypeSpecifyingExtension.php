@@ -754,17 +754,16 @@ class AssertTypeSpecifyingExtension implements StaticMethodTypeSpecifyingExtensi
 						)
 					);
 				},
+				'contains' => static function (Scope $scope, Arg $value, Arg $subString): array {
+					return self::createContainsResolver($scope, $value, $subString);
+				},
+				'startsWith' => static function (Scope $scope, Arg $value, Arg $subString): array {
+					return self::createStartsWithResolver($scope, $value, $subString);
+				},
+				'endsWith' => static function (Scope $scope, Arg $value, Arg $subString): array {
+					return self::createEndsWithResolver($scope, $value, $subString);
+				},
 			];
-
-			foreach (['contains', 'startsWith', 'endsWith'] as $name) {
-				$this->resolvers[$name] = function (Scope $scope, Arg $value, Arg $subString) use ($name): array {
-					if ($scope->getType($subString->value)->isNonEmptyString()->yes()) {
-						return self::createIsNonEmptyStringAndSomethingExprPair($name, [$value, $subString]);
-					}
-
-					return [$this->resolvers['string']($scope, $value), null];
-				};
-			}
 
 			$assertionsResultingAtLeastInNonEmptyString = [
 				'startsWithLetter',
@@ -1020,6 +1019,140 @@ class AssertTypeSpecifyingExtension implements StaticMethodTypeSpecifyingExtensi
 		return $specifiedTypes->unionWith(
 			$this->typeSpecifier->create($rootExpr, new ConstantBooleanType(true), TypeSpecifierContext::createTruthy())
 		);
+	}
+
+	/**
+	 * @return array{Expr, Expr}
+	 */
+	private static function createContainsResolver(Scope $scope, Arg $value, Arg $subString): array
+	{
+		$stringExpr = $scope->getType($subString->value)->isNonEmptyString()->yes()
+			? new BooleanAnd(
+				new FuncCall(
+					new Name('is_string'),
+					[$value]
+				),
+				new NotIdentical(
+					$value->value,
+					new String_('')
+				)
+			)
+			: new FuncCall(
+				new Name('is_string'),
+				[$value]
+			);
+
+		$expr = new BooleanOr(
+			$stringExpr,
+			new BooleanAnd(
+				$stringExpr,
+				new GreaterOrEqual(
+					new FuncCall(
+						new Name('strpos'),
+						[$value]
+					),
+					new LNumber(0)
+				)
+			)
+		);
+
+		$rootExpr = new BooleanAnd(
+			$expr,
+			new FuncCall(new Name('FAUX_FUNCTION_ contains'), [$value, $subString])
+		);
+
+		return [$expr, $rootExpr];
+	}
+
+	/**
+	 * @return array{Expr, Expr}
+	 */
+	private static function createStartsWithResolver(Scope $scope, Arg $string, Arg $subString): array
+	{
+		$stringExpr = $scope->getType($subString->value)->isNonEmptyString()->yes()
+			? new BooleanAnd(
+				new FuncCall(
+					new Name('is_string'),
+					[$string]
+				),
+				new NotIdentical(
+					$string->value,
+					new String_('')
+				)
+			)
+			: new FuncCall(
+				new Name('is_string'),
+				[$string]
+			);
+
+		$expr = new BooleanOr(
+			$stringExpr,
+			new Identical(
+				new FuncCall(
+					new Name('strpos'),
+					[$string, $subString]
+				),
+				new LNumber(0)
+			)
+		);
+
+		$rootExpr = new BooleanAnd(
+			$expr,
+			new FuncCall(new Name('FAUX_FUNCTION_ startsWith'), [$string, $subString])
+		);
+
+		return [$expr, $rootExpr];
+	}
+
+	/**
+	 * @return array{Expr, Expr}
+	 */
+	private static function createEndsWithResolver(Scope $scope, Arg $value, Arg $subString): array
+	{
+		if ($scope->getType($subString->value)->isNonEmptyString()->yes()) {
+			$stringExpr = new BooleanAnd(
+				new FuncCall(
+					new Name('is_string'),
+					[$value]
+				),
+				new NotIdentical(
+					$value->value,
+					new String_('')
+				)
+			);
+		} else {
+			$stringExpr = new FuncCall(
+				new Name('is_string'),
+				[$value]
+			);
+		}
+
+		$expr = new BooleanOr(
+			$stringExpr,
+			new Identical(
+				new FuncCall(
+					new Name('strpos'),
+					[$value, $subString]
+				),
+				new BinaryOp\Minus(
+					new FuncCall(
+						new Name('strlen'),
+						[$value]
+					),
+					new FuncCall(
+						new Name('strlen'),
+						[$subString]
+					)
+				)
+			)
+		);
+
+		$rootExpr = new BooleanAnd(
+			$expr,
+			new FuncCall(new Name('FAUX_FUNCTION_ endsWith'), [$value, $subString])
+		);
+
+		return [$expr, $rootExpr];
 	}
 
 }
